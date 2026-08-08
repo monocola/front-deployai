@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+      "devployer": {
+        "url": "https://backend-devployer-quarkus-v1.app.devployer.com/mcp",
+        "headers": {
+          "Authorization": "Bearer dply_66bd3b21fe518cddf6743b30d62d31ca6d0862145b8f113791a8eeb21fbb9b73"
+        },
+        "documentation": "https://devployer.com/docs/mcp-deploy",
+        "homepage": "https://devployer.com/docs/mcp"
+      }
+    }
+  }

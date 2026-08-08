@@ -1,88 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Copy, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
-import type { Plan } from "@/features/plans/models/plan.model";
+import type { DatabasePlan } from "@/features/database-plans/models/database-plan.model";
+import { formatDatabasePlanPrice } from "@/features/database-plans/models/database-plan.model";
 import {
-  useAdminPlans,
-  useDeleteAdminPlan,
-  useDuplicateAdminPlan,
-} from "@/features/plans/data-access/use-admin-plans";
-import { DatabasePlansListPage } from "@/features/database-plans/pages/database-plans-list-page";
-import { EmailPlansList } from "@/features/email-plans/pages/email-plans-list-page";
+  useAdminDatabasePlans,
+  useDeleteAdminDatabasePlan,
+  useDuplicateAdminDatabasePlan,
+} from "@/features/database-plans/data-access/use-admin-database-plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/core/errors/api-error.model";
-import { cn } from "@/lib/utils";
 
-type PlansTab = "applications" | "databases" | "email";
-
-function resolveTab(raw: string | null): PlansTab {
-  if (raw === "databases" || raw === "email") return raw;
-  return "applications";
-}
-
-export function PlansListPage() {
-  const searchParams = useSearchParams();
-  const tab = resolveTab(searchParams.get("tab"));
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Planes</h1>
-        <p className="mt-1 text-sm text-muted">
-          Catálogo unificado: aplicaciones, bases de datos y correo transaccional.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card-elevated/40 p-1">
-        <TabLink href="/plans?tab=applications" active={tab === "applications"}>
-          Aplicaciones
-        </TabLink>
-        <TabLink href="/plans?tab=databases" active={tab === "databases"}>
-          Bases de datos
-        </TabLink>
-        <TabLink href="/plans?tab=email" active={tab === "email"}>
-          Correo
-        </TabLink>
-      </div>
-
-      {tab === "applications" && <ApplicationPlansPanel />}
-      {tab === "databases" && <DatabasePlansEmbedded />}
-      {tab === "email" && <EmailPlansList embedded />}
-    </div>
-  );
-}
-
-function TabLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-md px-3 py-1.5 text-sm transition-colors",
-        active
-          ? "bg-background text-foreground shadow-sm"
-          : "text-muted hover:text-foreground"
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function ApplicationPlansPanel() {
-  const { data: plans, isLoading, error } = useAdminPlans();
-  const deletePlan = useDeleteAdminPlan();
-  const duplicatePlan = useDuplicateAdminPlan();
+export function DatabasePlansListPage({ embedded = false }: { embedded?: boolean }) {
+  const { data: plans, isLoading, error } = useAdminDatabasePlans();
+  const deletePlan = useDeleteAdminDatabasePlan();
+  const duplicatePlan = useDuplicateAdminDatabasePlan();
 
   if (isLoading) {
     return (
@@ -102,14 +36,32 @@ function ApplicationPlansPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button asChild>
-          <Link href="/plans/new">
-            <Plus className="h-4 w-4" />
-            Nuevo plan
-          </Link>
-        </Button>
-      </div>
+      {!embedded && (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Planes de bases de datos</h1>
+            <p className="mt-1 text-sm text-muted">
+              Administra precios y límites del catálogo que ven los usuarios en DeployAI.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/database-plans/new">
+              <Plus className="h-4 w-4" />
+              Nuevo plan
+            </Link>
+          </Button>
+        </div>
+      )}
+      {embedded && (
+        <div className="flex justify-end">
+          <Button asChild>
+            <Link href="/database-plans/new">
+              <Plus className="h-4 w-4" />
+              Nuevo plan
+            </Link>
+          </Button>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-left text-sm">
@@ -124,7 +76,7 @@ function ApplicationPlansPanel() {
           </thead>
           <tbody>
             {plans?.map((plan) => (
-              <PlanRow
+              <DatabasePlanRow
                 key={plan.id}
                 plan={plan}
                 onDelete={() => deletePlan.mutate(plan.id)}
@@ -140,18 +92,14 @@ function ApplicationPlansPanel() {
   );
 }
 
-function DatabasePlansEmbedded() {
-  return <DatabasePlansListPage embedded />;
-}
-
-function PlanRow({
+function DatabasePlanRow({
   plan,
   onDelete,
   onDuplicate,
   deleting,
   duplicating,
 }: {
-  plan: Plan;
+  plan: DatabasePlan;
   onDelete: () => void;
   onDuplicate: () => void;
   deleting: boolean;
@@ -168,10 +116,10 @@ function PlanRow({
         <div className="text-xs text-muted">{plan.code}</div>
       </td>
       <td className="px-4 py-4">
-        ${plan.monthlyPrice} {plan.currency}
+        {formatDatabasePlanPrice(plan.priceCentsMonthly, plan.currency)}
       </td>
       <td className="px-4 py-4 text-muted">
-        {plan.limits.cpu} vCPU · {plan.limits.memoryMb} MB · {plan.limits.diskGb} GB
+        {plan.limitsCpus} vCPU · {plan.limitsMemory} · {plan.storageGb} GB
       </td>
       <td className="px-4 py-4">
         <div className="flex flex-wrap gap-1.5">
@@ -186,7 +134,7 @@ function PlanRow({
       <td className="px-4 py-4">
         <div className="flex justify-end gap-1">
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/plans/${plan.id}`}>
+            <Link href={`/database-plans/${plan.id}`}>
               <Pencil className="h-4 w-4" />
               Editar
             </Link>
