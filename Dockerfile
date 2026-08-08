@@ -14,11 +14,12 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 EXPOSE 3000
-# Coolify/Devployer may inject HOSTNAME; force bind on all interfaces to avoid 502.
-CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
+# Force bind address at start; Coolify may inject HOSTNAME.
+CMD ["sh", "-c", "h=0; HOSTNAME=$h.$h.$h.$h exec node server.js"]
