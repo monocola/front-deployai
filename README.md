@@ -45,3 +45,4 @@ Usa `POST /api/v1/auth/admin/login` — solo usuarios con `role = MANAGER` puede
 - `POST /api/v1/admin/plans` — crear plan
 - `DELETE /api/v1/admin/plans/{id}` — eliminar plan
 # front-devployer-panel--manager
+# front-devployer-panel--manager
