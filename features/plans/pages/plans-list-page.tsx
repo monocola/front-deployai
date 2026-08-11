@@ -11,15 +11,16 @@ import {
 } from "@/features/plans/data-access/use-admin-plans";
 import { DatabasePlansListPage } from "@/features/database-plans/pages/database-plans-list-page";
 import { EmailPlansList } from "@/features/email-plans/pages/email-plans-list-page";
+import { CouponsList } from "@/features/coupons/pages/coupons-list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/core/errors/api-error.model";
 import { cn } from "@/lib/utils";
 
-type PlansTab = "applications" | "databases" | "email";
+type PlansTab = "applications" | "databases" | "email" | "coupons";
 
 function resolveTab(raw: string | null): PlansTab {
-  if (raw === "databases" || raw === "email") return raw;
+  if (raw === "databases" || raw === "email" || raw === "coupons") return raw;
   return "applications";
 }
 
@@ -32,7 +33,7 @@ export function PlansListPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Planes</h1>
         <p className="mt-1 text-sm text-muted">
-          Catálogo unificado: aplicaciones, bases de datos y correo transaccional.
+          Catálogo unificado: aplicaciones, bases de datos, correo y cupones.
         </p>
       </div>
 
@@ -46,11 +47,15 @@ export function PlansListPage() {
         <TabLink href="/plans?tab=email" active={tab === "email"}>
           Correo
         </TabLink>
+        <TabLink href="/plans?tab=coupons" active={tab === "coupons"}>
+          Cupones
+        </TabLink>
       </div>
 
       {tab === "applications" && <ApplicationPlansPanel />}
       {tab === "databases" && <DatabasePlansEmbedded />}
       {tab === "email" && <EmailPlansList embedded />}
+      {tab === "coupons" && <CouponsList embedded />}
     </div>
   );
 }

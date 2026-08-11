@@ -37,8 +37,22 @@ export const apiEndpoints = {
     overview: () => "/admin/resources",
     block: (resourceId: string) => `/admin/resources/${resourceId}/block`,
     unblock: (resourceId: string) => `/admin/resources/${resourceId}/unblock`,
+    transfer: (resourceId: string) => `/admin/resources/${resourceId}/transfer`,
+    coolifyOrphans: () => "/admin/resources/coolify-orphans",
+    claimCoolifyOrphan: () => "/admin/resources/coolify-orphans/claim",
+  },
+  adminUsers: {
+    search: () => "/admin/users",
+    projects: (userId: string) => `/admin/users/${userId}/projects`,
   },
   adminPayments: {
     overview: () => "/admin/payments",
+  },
+  adminCoupons: {
+    list: () => "/admin/coupons",
+    get: (couponId: string) => `/admin/coupons/${couponId}`,
+    create: () => "/admin/coupons",
+    update: (couponId: string) => `/admin/coupons/${couponId}`,
+    delete: (couponId: string) => `/admin/coupons/${couponId}`,
   },
 } as const;
