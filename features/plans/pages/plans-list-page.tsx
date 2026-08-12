@@ -186,6 +186,7 @@ function PlanRow({
             <Badge variant="muted">Inactivo</Badge>
           )}
           {plan.recommended && <Badge>Más popular</Badge>}
+          {plan.firstMonthFree && <Badge variant="success">Primer mes gratis</Badge>}
         </div>
       </td>
       <td className="px-4 py-4">

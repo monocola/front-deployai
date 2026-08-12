@@ -45,8 +45,21 @@ export const apiEndpoints = {
     search: () => "/admin/users",
     projects: (userId: string) => `/admin/users/${userId}/projects`,
   },
+  adminCustomers: {
+    list: () => "/admin/customers",
+    resources: (userId: string) => `/admin/customers/${userId}/resources`,
+  },
   adminPayments: {
     overview: () => "/admin/payments",
+  },
+  adminInvoices: {
+    list: () => "/admin/invoices",
+    customers: () => "/admin/invoices/customers",
+    preview: () => "/admin/invoices/preview",
+    create: () => "/admin/invoices",
+    get: (invoiceId: string) => `/admin/invoices/${invoiceId}`,
+    update: (invoiceId: string) => `/admin/invoices/${invoiceId}`,
+    sendReceipt: (invoiceId: string) => `/admin/invoices/${invoiceId}/send-receipt`,
   },
   adminCoupons: {
     list: () => "/admin/coupons",

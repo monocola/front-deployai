@@ -21,6 +21,7 @@ export function PlanDetailsForm({ plan, isNew, saving, onSubmit }: PlanDetailsFo
   const [currency, setCurrency] = useState(plan?.currency ?? "USD");
   const [enabled, setEnabled] = useState(plan?.enabled ?? true);
   const [recommended, setRecommended] = useState(plan?.recommended ?? false);
+  const [firstMonthFree, setFirstMonthFree] = useState(plan?.firstMonthFree ?? false);
   const [displayOrder, setDisplayOrder] = useState(String(plan?.displayOrder ?? "1"));
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -33,6 +34,7 @@ export function PlanDetailsForm({ plan, isNew, saving, onSubmit }: PlanDetailsFo
       currency: currency.trim(),
       enabled,
       recommended,
+      firstMonthFree,
       displayOrder: Number(displayOrder),
     };
 
@@ -93,6 +95,19 @@ export function PlanDetailsForm({ plan, isNew, saving, onSubmit }: PlanDetailsFo
           onChange={(e) => setRecommended(e.target.checked)}
         />
         Marcar como más popular
+      </label>
+      <label className="flex flex-col gap-1 text-sm lg:col-span-2">
+        <span className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={firstMonthFree}
+            onChange={(e) => setFirstMonthFree(e.target.checked)}
+          />
+          Primer mes gratis
+        </span>
+        <span className="pl-6 text-xs text-muted">
+          Solo aplicaciones: el primer mes queda en $0, una vez por correo de cuenta.
+        </span>
       </label>
       <div className="lg:col-span-2 flex justify-end">
         <Button type="submit" disabled={saving}>

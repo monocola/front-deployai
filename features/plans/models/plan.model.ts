@@ -56,6 +56,8 @@ export interface Plan {
   currency: string;
   enabled: boolean;
   recommended: boolean;
+  /** Application plans only: first calendar month at $0 (1 per email). */
+  firstMonthFree: boolean;
   displayOrder: number;
   limits: PlanResourceLimits;
   features: PlanFeaturesPayload;
@@ -71,6 +73,7 @@ export interface UpdatePlanPayload {
   currency?: string;
   enabled?: boolean;
   recommended?: boolean;
+  firstMonthFree?: boolean;
   displayOrder?: number;
 }
 
@@ -82,6 +85,7 @@ export interface CreatePlanPayload {
   currency?: string;
   enabled: boolean;
   recommended: boolean;
+  firstMonthFree: boolean;
   displayOrder: number;
 }
 
@@ -109,9 +113,10 @@ export interface UpdatePlanFeaturesPayload {
   features: PlanFeatureEntry[];
 }
 
-type RawPlan = Omit<Plan, "monthlyPrice" | "features" | "description"> & {
+type RawPlan = Omit<Plan, "monthlyPrice" | "features" | "description" | "firstMonthFree"> & {
   monthlyPrice: number | string;
   description?: string | null;
+  firstMonthFree?: boolean;
   features?: {
     features?: Record<string, boolean>;
     values?: Record<string, string>;
@@ -123,6 +128,7 @@ export function mapPlan(raw: RawPlan): Plan {
     ...raw,
     monthlyPrice: Number(raw.monthlyPrice),
     description: raw.description ?? null,
+    firstMonthFree: Boolean(raw.firstMonthFree),
     features: {
       features: raw.features?.features ?? {},
       values: raw.features?.values ?? {},

@@ -35,3 +35,13 @@ export async function unblockAdminResource(
 ): Promise<AdminResource> {
   return apiClient.post(apiEndpoints.adminResources.unblock(resourceId));
 }
+
+export async function transferAdminResource(
+  resourceId: string,
+  payload: { targetUserId?: string; targetUserEmail?: string }
+): Promise<AdminResource> {
+  return apiClient.post(apiEndpoints.adminResources.transfer(resourceId), {
+    targetUserId: payload.targetUserId?.trim() || null,
+    targetUserEmail: payload.targetUserEmail?.trim() || null,
+  });
+}
