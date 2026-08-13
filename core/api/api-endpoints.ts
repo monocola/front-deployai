@@ -68,4 +68,8 @@ export const apiEndpoints = {
     update: (couponId: string) => `/admin/coupons/${couponId}`,
     delete: (couponId: string) => `/admin/coupons/${couponId}`,
   },
+  adminDockerfileAudit: {
+    get: () => "/admin/dockerfile-audit",
+    update: () => "/admin/dockerfile-audit",
+  },
 } as const;

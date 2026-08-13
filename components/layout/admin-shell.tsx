@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   Package,
+  ShieldCheck,
   Users,
   X,
 } from "lucide-react";
@@ -52,6 +53,12 @@ const NAV_ITEMS = [
       p.startsWith("/database-plans") ||
       p.startsWith("/email-plans") ||
       p.startsWith("/coupons"),
+  },
+  {
+    href: "/auditoria",
+    label: "Auditoría",
+    icon: ShieldCheck,
+    match: (p: string) => p.startsWith("/auditoria"),
   },
   { href: "/tickets", label: "Soporte", icon: LifeBuoy, match: (p: string) => p.startsWith("/tickets") },
 ] as const;
