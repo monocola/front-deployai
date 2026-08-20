@@ -1,5 +1,12 @@
 export type TrafficActivity = "ACTIVE" | "IDLE" | "SLEEPING" | "STOPPED" | "NO_DATA";
 
+const PLATFORM_NAME_MARKERS = [
+  "backend-devployer",
+  "front-devployer",
+  "front-admin",
+  "front-deployai",
+];
+
 export interface AdminApplicationTraffic {
   id: string;
   name: string;
@@ -37,4 +44,22 @@ export interface AdminApplicationTrafficOverview {
   totalTransmitBytesPerSecond: number;
   activeThresholdBytesPerSecond: number;
   metricsWarning: string | null;
+}
+
+export function isPlatformTrafficName(name: string | null | undefined): boolean {
+  const lower = (name ?? "").toLowerCase();
+  return PLATFORM_NAME_MARKERS.some((marker) => lower.includes(marker));
+}
+
+export function isAutoStopEligibleRow(item: AdminApplicationTraffic): boolean {
+  if (isPlatformTrafficName(item.name)) return false;
+  if (item.autoStopEligible) return true;
+  const code = item.planCode?.trim().toUpperCase() ?? "";
+  return code === "" || code === "FREE";
+}
+
+export function autoStopMinutes(item: AdminApplicationTraffic): number {
+  return item.sleepAfterMinutes && item.sleepAfterMinutes > 0
+    ? item.sleepAfterMinutes
+    : 30;
 }

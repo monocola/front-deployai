@@ -20,7 +20,10 @@ import type {
   AdminApplicationTraffic,
   TrafficActivity,
 } from "@/features/traffic/models/admin-traffic.model";
-import { cn } from "@/lib/utils";
+import {
+  autoStopMinutes,
+  isAutoStopEligibleRow,
+} from "@/features/traffic/models/admin-traffic.model";
 
 const ACTIVITY_FILTERS: Array<{ value: "" | TrafficActivity; label: string }> = [
   { value: "", label: "Todas" },
@@ -47,23 +50,31 @@ function formatIdle(seconds: number | null | undefined): string {
   return `${hours} h ${minutes % 60} min`;
 }
 
-function formatIdleCountdown(item: AdminApplicationTraffic): string {
-  const idle = formatIdle(item.idleForSeconds);
-  if (
-    !item.autoStopEnabled ||
-    item.activity === "SLEEPING" ||
-    item.activity === "STOPPED"
-  ) {
-    return idle;
+function stopCountdown(item: AdminApplicationTraffic): {
+  remainingLabel: string;
+  tone: "muted" | "warning" | "danger";
+} | null {
+  if (!isAutoStopEligibleRow(item)) return null;
+  if (item.activity === "SLEEPING") {
+    return { remainingLabel: "Dormida", tone: "muted" };
   }
-  if (!item.sleepAfterMinutes || item.idleForSeconds == null) {
-    return idle;
+  if (item.activity === "STOPPED") {
+    return { remainingLabel: "Detenida", tone: "muted" };
   }
-  const remaining = item.sleepAfterMinutes * 60 - item.idleForSeconds;
-  if (remaining <= 0) {
-    return `${idle} · deteniendo…`;
+  const remainingSecs = autoStopMinutes(item) * 60 - (item.idleForSeconds ?? 0);
+  if (!item.autoStopEnabled) {
+    return {
+      remainingLabel: `Off · ${autoStopMinutes(item)} min`,
+      tone: "muted",
+    };
   }
-  return `${idle} · sleep en ${formatIdle(remaining)}`;
+  if (remainingSecs <= 0) {
+    return { remainingLabel: "Deteniendo ahora", tone: "danger" };
+  }
+  return {
+    remainingLabel: formatIdle(remainingSecs),
+    tone: remainingSecs <= 120 ? "danger" : "warning",
+  };
 }
 
 function activityBadge(activity: TrafficActivity): {
@@ -114,9 +125,9 @@ export function ApplicationTrafficPage() {
             Entrada y salida de red de cada aplicación (Prometheus). Se actualiza
             cada 20 s. Umbral de actividad:{" "}
             {formatBytesPerSecond(data?.activeThresholdBytesPerSecond ?? 2048)}.
-            Sin actividad 30 min se detiene solo si el check Auto-stop está
-            marcado (Free y Sin plan). El arranque es al momento (Start o la
-            URL de wake), no espera al job de 60 s. Always on de pago no aplica.
+            En Free y Sin plan verás el switch Auto-stop y el contador de
+            cuánto falta para detener. El job solo apaga; el arranque es al
+            momento. Always on de pago no aplica.
           </p>
         </div>
       </div>
@@ -206,7 +217,7 @@ export function ApplicationTrafficPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3 font-medium">Aplicación</th>
@@ -214,6 +225,7 @@ export function ApplicationTrafficPage() {
                 <th className="px-4 py-3 font-medium">Entrada</th>
                 <th className="px-4 py-3 font-medium">Salida</th>
                 <th className="px-4 py-3 font-medium">Sin tráfico</th>
+                <th className="px-4 py-3 font-medium">Se detiene en</th>
                 <th className="px-4 py-3 font-medium">Auto-stop</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
               </tr>
@@ -271,6 +283,8 @@ function TrafficRow({
   const badge = activityBadge(item.activity);
   const receive = item.receiveBytesPerSecond ?? 0;
   const width = maxReceive > 0 ? Math.max(4, Math.round((receive / maxReceive) * 100)) : 0;
+  const eligible = isAutoStopEligibleRow(item);
+  const countdown = stopCountdown(item);
 
   return (
     <tr className="border-b border-border/50 last:border-0">
@@ -309,25 +323,55 @@ function TrafficRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 text-muted">
-          <Clock className="h-3.5 w-3.5" />
-          {formatIdleCountdown(item)}
+        <div className="flex items-center gap-1.5 tabular-nums text-foreground">
+          <Clock className="h-3.5 w-3.5 text-muted" />
+          {formatIdle(item.idleForSeconds)}
         </div>
       </td>
       <td className="px-4 py-3">
-        {item.autoStopEligible ? (
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-primary"
-              checked={item.autoStopEnabled}
+        {countdown ? (
+          <p
+            className={cn(
+              "text-sm font-medium tabular-nums",
+              countdown.tone === "danger" && "text-error",
+              countdown.tone === "warning" && "text-warning",
+              countdown.tone === "muted" && "text-muted"
+            )}
+          >
+            {countdown.remainingLabel}
+          </p>
+        ) : (
+          <p className="text-xs text-muted">—</p>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {eligible ? (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={item.autoStopEnabled}
+              aria-label={`Auto-stop ${item.name}`}
               disabled={autoStopPending}
-              onChange={(event) => onAutoStopChange(event.target.checked)}
-            />
-            {item.autoStopEnabled
-              ? `Sleep ${item.sleepAfterMinutes ?? 30} min`
-              : "No"}
-          </label>
+              onClick={() => onAutoStopChange(!item.autoStopEnabled)}
+              className={
+                item.autoStopEnabled
+                  ? "relative h-6 w-11 shrink-0 rounded-full bg-primary transition-colors disabled:opacity-50"
+                  : "relative h-6 w-11 shrink-0 rounded-full bg-card-elevated ring-1 ring-inset ring-border transition-colors disabled:opacity-50"
+              }
+            >
+              <span
+                className={
+                  item.autoStopEnabled
+                    ? "absolute left-6 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
+                    : "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-muted-foreground/70 shadow transition-all"
+                }
+              />
+            </button>
+            <span className="text-sm text-foreground">
+              {item.autoStopEnabled ? "On" : "Off"}
+            </span>
+          </div>
         ) : (
           <p className="text-xs text-muted">No aplica</p>
         )}
@@ -335,13 +379,13 @@ function TrafficRow({
       <td className="px-4 py-3">
         <p className="text-foreground">{item.planName || item.planCode || "Sin plan"}</p>
         <p className="text-[11px] text-muted">
-          {item.alwaysOn && !item.autoStopEligible
-            ? "Always on"
-            : item.autoStopEnabled && item.sleepAfterMinutes
-              ? `Sleep ${item.sleepAfterMinutes} min`
-              : item.autoStopEligible
-                ? "Free / Sin plan"
-                : "Sin auto-sleep"}
+          {!eligible
+            ? item.alwaysOn
+              ? "Always on"
+              : "Sin auto-sleep"
+            : item.autoStopEnabled
+              ? `Sleep ${autoStopMinutes(item)} min`
+              : "Free / Sin plan"}
         </p>
       </td>
     </tr>
