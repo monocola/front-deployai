@@ -44,18 +44,39 @@ function formatBytesPerSecond(value: number | null | undefined): string {
 
 function formatIdle(seconds: number | null | undefined): string {
   if (seconds == null || seconds < 0) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours} h ${minutes % 60} min`;
+  return formatClock(seconds);
 }
 
-function formatMmSs(totalSeconds: number): string {
+function formatClock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const r = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(r).padStart(2, "0");
+  if (h > 0) {
+    return `${h}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
+}
+
+function secondsSinceFetch(fetchedAt: number, nowMs: number): number {
+  if (!fetchedAt) return 0;
+  return Math.max(0, Math.floor((nowMs - fetchedAt) / 1000));
+}
+
+function liveIdleSeconds(
+  item: AdminApplicationTraffic,
+  fetchedAt: number,
+  nowMs: number
+): number | null {
+  if (item.activity === "ACTIVE") {
+    return 0;
+  }
+  if (item.idleForSeconds == null) {
+    return null;
+  }
+  return item.idleForSeconds + secondsSinceFetch(fetchedAt, nowMs);
 }
 
 function useNowTick(enabled: boolean): number {
@@ -88,13 +109,15 @@ function stopCountdown(
   }
   if (item.activity === "ACTIVE") {
     return {
-      remainingLabel: formatMmSs(autoStopMinutes(item) * 60),
+      remainingLabel: formatClock(autoStopMinutes(item) * 60),
       tone: "muted",
     };
   }
-  const extra = fetchedAt > 0 ? Math.max(0, Math.floor((nowMs - fetchedAt) / 1000)) : 0;
-  const remaining = autoStopMinutes(item) * 60 - (item.idleForSeconds ?? 0) - extra;
-  const label = formatMmSs(remaining);
+  const remaining =
+    autoStopMinutes(item) * 60 -
+    (item.idleForSeconds ?? 0) -
+    secondsSinceFetch(fetchedAt, nowMs);
+  const label = formatClock(remaining);
   if (remaining <= 0) {
     return { remainingLabel: label, tone: "danger" };
   }
@@ -156,9 +179,9 @@ export function ApplicationTrafficPage() {
             Entrada y salida de red de cada aplicación (Prometheus). Se actualiza
             cada 20 s. Umbral de actividad:{" "}
             {formatBytesPerSecond(data?.activeThresholdBytesPerSecond ?? 2048)}.
-            Con Auto-stop On, el contador baja desde el último tráfico (30:00).
-            A 00:00 el recurso pasa a Dormida. Si hay consumo, arranca y el
-            contador vuelve a 30:00. Always on de pago no aplica.
+            Con Auto-stop On, el reloj baja cada segundo desde el último
+            tráfico (30:00). A 00:00 el recurso pasa a Dormida. Si hay
+            consumo, arranca y vuelve a 30:00. Always on de pago no aplica.
           </p>
         </div>
       </div>
@@ -255,8 +278,18 @@ export function ApplicationTrafficPage() {
                 <th className="px-4 py-3 font-medium">Actividad</th>
                 <th className="px-4 py-3 font-medium">Entrada</th>
                 <th className="px-4 py-3 font-medium">Salida</th>
-                <th className="px-4 py-3 font-medium">Sin tráfico</th>
-                <th className="px-4 py-3 font-medium">Se detiene en</th>
+                <th className="px-4 py-3 font-medium">
+                  Sin tráfico
+                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">
+                    min:seg
+                  </span>
+                </th>
+                <th className="px-4 py-3 font-medium">
+                  Se detiene en
+                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">
+                    min:seg
+                  </span>
+                </th>
                 <th className="px-4 py-3 font-medium">Auto-stop</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
               </tr>
@@ -322,6 +355,7 @@ function TrafficRow({
   const width = maxReceive > 0 ? Math.max(4, Math.round((receive / maxReceive) * 100)) : 0;
   const eligible = isAutoStopEligibleRow(item);
   const countdown = stopCountdown(item, fetchedAt, nowMs);
+  const idleClock = formatIdle(liveIdleSeconds(item, fetchedAt, nowMs));
 
   return (
     <tr className="border-b border-border/50 last:border-0">
@@ -360,16 +394,16 @@ function TrafficRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 tabular-nums text-foreground">
+        <div className="flex items-center gap-1.5 font-mono text-lg font-semibold tabular-nums tracking-tight text-foreground">
           <Clock className="h-3.5 w-3.5 text-muted" />
-          {formatIdle(item.idleForSeconds)}
+          {idleClock}
         </div>
       </td>
       <td className="px-4 py-3">
         {countdown ? (
           <p
             className={cn(
-              "text-lg font-semibold tabular-nums tracking-tight",
+              "font-mono text-lg font-semibold tabular-nums tracking-tight",
               countdown.tone === "danger" && "text-error",
               countdown.tone === "warning" && "text-warning",
               countdown.tone === "muted" && "text-muted"
