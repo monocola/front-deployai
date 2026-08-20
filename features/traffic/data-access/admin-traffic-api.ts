@@ -13,3 +13,15 @@ export async function listAdminApplicationTraffic(
     : apiEndpoints.adminResources.traffic();
   return apiClient.get(path);
 }
+
+export async function setAdminApplicationAutoStop(
+  resourceId: string,
+  enabled: boolean
+): Promise<{
+  resourceId: string;
+  autoStopEnabled: boolean;
+  autoStopEligible: boolean;
+  sleepAfterMinutes: number | null;
+}> {
+  return apiClient.post(apiEndpoints.adminResources.autoStop(resourceId), { enabled });
+}

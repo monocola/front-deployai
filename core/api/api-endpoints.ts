@@ -36,6 +36,7 @@ export const apiEndpoints = {
   adminResources: {
     overview: () => "/admin/resources",
     traffic: () => "/admin/resources/traffic",
+    autoStop: (resourceId: string) => `/admin/resources/${resourceId}/auto-stop`,
     block: (resourceId: string) => `/admin/resources/${resourceId}/block`,
     unblock: (resourceId: string) => `/admin/resources/${resourceId}/unblock`,
     transfer: (resourceId: string) => `/admin/resources/${resourceId}/transfer`,

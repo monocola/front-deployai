@@ -21,6 +21,8 @@ export interface AdminApplicationTraffic {
   trafficSampledAt: string | null;
   sleptAt: string | null;
   idleForSeconds: number | null;
+  autoStopEnabled: boolean;
+  autoStopEligible: boolean;
 }
 
 export interface AdminApplicationTrafficOverview {

@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/core/errors/api-error.model";
-import { useAdminApplicationTraffic } from "@/features/traffic/data-access/use-admin-traffic";
+import { useAdminApplicationTraffic, useSetAdminApplicationAutoStop } from "@/features/traffic/data-access/use-admin-traffic";
 import type {
   AdminApplicationTraffic,
   TrafficActivity,
@@ -47,6 +47,25 @@ function formatIdle(seconds: number | null | undefined): string {
   return `${hours} h ${minutes % 60} min`;
 }
 
+function formatIdleCountdown(item: AdminApplicationTraffic): string {
+  const idle = formatIdle(item.idleForSeconds);
+  if (
+    !item.autoStopEnabled ||
+    item.activity === "SLEEPING" ||
+    item.activity === "STOPPED"
+  ) {
+    return idle;
+  }
+  if (!item.sleepAfterMinutes || item.idleForSeconds == null) {
+    return idle;
+  }
+  const remaining = item.sleepAfterMinutes * 60 - item.idleForSeconds;
+  if (remaining <= 0) {
+    return `${idle} · deteniendo…`;
+  }
+  return `${idle} · sleep en ${formatIdle(remaining)}`;
+}
+
 function activityBadge(activity: TrafficActivity): {
   variant: "default" | "success" | "warning" | "muted";
   label: string;
@@ -71,6 +90,7 @@ export function ApplicationTrafficPage() {
   const [activity, setActivity] = useState<"" | TrafficActivity>("");
   const { data, isLoading, isError, error, dataUpdatedAt, refetch, isFetching } =
     useAdminApplicationTraffic(search);
+  const setAutoStop = useSetAdminApplicationAutoStop(search);
 
   const applications = data?.applications ?? [];
   const filtered = useMemo(() => {
@@ -94,6 +114,9 @@ export function ApplicationTrafficPage() {
             Entrada y salida de red de cada aplicación (Prometheus). Se actualiza
             cada 20 s. Umbral de actividad:{" "}
             {formatBytesPerSecond(data?.activeThresholdBytesPerSecond ?? 2048)}.
+            Sin actividad 30 min se detiene solo si el check Auto-stop está
+            marcado (Free y Sin plan). El arranque es al momento (Start o la
+            URL de wake), no espera al job de 60 s. Always on de pago no aplica.
           </p>
         </div>
       </div>
@@ -183,7 +206,7 @@ export function ApplicationTrafficPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3 font-medium">Aplicación</th>
@@ -191,12 +214,21 @@ export function ApplicationTrafficPage() {
                 <th className="px-4 py-3 font-medium">Entrada</th>
                 <th className="px-4 py-3 font-medium">Salida</th>
                 <th className="px-4 py-3 font-medium">Sin tráfico</th>
+                <th className="px-4 py-3 font-medium">Auto-stop</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <TrafficRow key={item.id} item={item} maxReceive={maxReceive} />
+                <TrafficRow
+                  key={item.id}
+                  item={item}
+                  maxReceive={maxReceive}
+                  autoStopPending={setAutoStop.isPending && setAutoStop.variables?.resourceId === item.id}
+                  onAutoStopChange={(enabled) =>
+                    setAutoStop.mutate({ resourceId: item.id, enabled })
+                  }
+                />
               ))}
             </tbody>
           </table>
@@ -228,9 +260,13 @@ function SummaryStat({
 function TrafficRow({
   item,
   maxReceive,
+  autoStopPending,
+  onAutoStopChange,
 }: {
   item: AdminApplicationTraffic;
   maxReceive: number;
+  autoStopPending: boolean;
+  onAutoStopChange: (enabled: boolean) => void;
 }) {
   const badge = activityBadge(item.activity);
   const receive = item.receiveBytesPerSecond ?? 0;
@@ -275,17 +311,37 @@ function TrafficRow({
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 text-muted">
           <Clock className="h-3.5 w-3.5" />
-          {formatIdle(item.idleForSeconds)}
+          {formatIdleCountdown(item)}
         </div>
+      </td>
+      <td className="px-4 py-3">
+        {item.autoStopEligible ? (
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={item.autoStopEnabled}
+              disabled={autoStopPending}
+              onChange={(event) => onAutoStopChange(event.target.checked)}
+            />
+            {item.autoStopEnabled
+              ? `Sleep ${item.sleepAfterMinutes ?? 30} min`
+              : "No"}
+          </label>
+        ) : (
+          <p className="text-xs text-muted">No aplica</p>
+        )}
       </td>
       <td className="px-4 py-3">
         <p className="text-foreground">{item.planName || item.planCode || "Sin plan"}</p>
         <p className="text-[11px] text-muted">
-          {item.alwaysOn
+          {item.alwaysOn && !item.autoStopEligible
             ? "Always on"
-            : item.sleepAfterMinutes
+            : item.autoStopEnabled && item.sleepAfterMinutes
               ? `Sleep ${item.sleepAfterMinutes} min`
-              : "—"}
+              : item.autoStopEligible
+                ? "Free / Sin plan"
+                : "Sin auto-sleep"}
         </p>
       </td>
     </tr>
