@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowDownToLine,
@@ -51,7 +51,28 @@ function formatIdle(seconds: number | null | undefined): string {
   return `${hours} h ${minutes % 60} min`;
 }
 
-function stopCountdown(item: AdminApplicationTraffic): {
+function formatMmSs(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+function useNowTick(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [enabled]);
+  return now;
+}
+
+function stopCountdown(
+  item: AdminApplicationTraffic,
+  fetchedAt: number,
+  nowMs: number
+): {
   remainingLabel: string;
   tone: "muted" | "warning" | "danger";
 } | null {
@@ -62,25 +83,27 @@ function stopCountdown(item: AdminApplicationTraffic): {
   if (item.activity === "STOPPED") {
     return { remainingLabel: "Detenida", tone: "muted" };
   }
-  const remainingSecs = autoStopMinutes(item) * 60 - (item.idleForSeconds ?? 0);
   if (!item.autoStopEnabled) {
-    if (remainingSecs <= 0) {
-      return {
-        remainingLabel: "se detendría ahora · activa Auto-stop",
-        tone: "muted",
-      };
-    }
+    return { remainingLabel: "Auto-stop off", tone: "muted" };
+  }
+  if (item.activity === "ACTIVE") {
     return {
-      remainingLabel: `se detiene en ${formatIdle(remainingSecs)} si activas`,
+      remainingLabel: formatMmSs(autoStopMinutes(item) * 60),
       tone: "muted",
     };
   }
-  if (remainingSecs <= 0) {
-    return { remainingLabel: "se detiene ahora", tone: "danger" };
+  const extra = fetchedAt > 0 ? Math.max(0, Math.floor((nowMs - fetchedAt) / 1000)) : 0;
+  const remaining = autoStopMinutes(item) * 60 - (item.idleForSeconds ?? 0) - extra;
+  const label = formatMmSs(remaining);
+  if (remaining <= 0) {
+    return { remainingLabel: label, tone: "danger" };
+  }
+  if (remaining <= 60) {
+    return { remainingLabel: label, tone: "danger" };
   }
   return {
-    remainingLabel: `se detiene en ${formatIdle(remainingSecs)}`,
-    tone: remainingSecs <= 120 ? "danger" : "warning",
+    remainingLabel: label,
+    tone: remaining <= 5 * 60 ? "warning" : "muted",
   };
 }
 
@@ -109,6 +132,7 @@ export function ApplicationTrafficPage() {
   const { data, isLoading, isError, error, dataUpdatedAt, refetch, isFetching } =
     useAdminApplicationTraffic(search);
   const setAutoStop = useSetAdminApplicationAutoStop(search);
+  const nowMs = useNowTick(true);
 
   const applications = data?.applications ?? [];
   const filtered = useMemo(() => {
@@ -132,9 +156,9 @@ export function ApplicationTrafficPage() {
             Entrada y salida de red de cada aplicación (Prometheus). Se actualiza
             cada 20 s. Umbral de actividad:{" "}
             {formatBytesPerSecond(data?.activeThresholdBytesPerSecond ?? 2048)}.
-            En Free y Sin plan verás el switch Auto-stop y el contador de
-            cuánto falta para detener. El job solo apaga; el arranque es al
-            momento. Always on de pago no aplica.
+            Con Auto-stop On, el contador baja desde el último tráfico (30:00).
+            A 00:00 el recurso pasa a Dormida. Si hay consumo, arranca y el
+            contador vuelve a 30:00. Always on de pago no aplica.
           </p>
         </div>
       </div>
@@ -243,6 +267,8 @@ export function ApplicationTrafficPage() {
                   key={item.id}
                   item={item}
                   maxReceive={maxReceive}
+                  fetchedAt={dataUpdatedAt}
+                  nowMs={nowMs}
                   autoStopPending={setAutoStop.isPending && setAutoStop.variables?.resourceId === item.id}
                   onAutoStopChange={(enabled) =>
                     setAutoStop.mutate({ resourceId: item.id, enabled })
@@ -279,11 +305,15 @@ function SummaryStat({
 function TrafficRow({
   item,
   maxReceive,
+  fetchedAt,
+  nowMs,
   autoStopPending,
   onAutoStopChange,
 }: {
   item: AdminApplicationTraffic;
   maxReceive: number;
+  fetchedAt: number;
+  nowMs: number;
   autoStopPending: boolean;
   onAutoStopChange: (enabled: boolean) => void;
 }) {
@@ -291,7 +321,7 @@ function TrafficRow({
   const receive = item.receiveBytesPerSecond ?? 0;
   const width = maxReceive > 0 ? Math.max(4, Math.round((receive / maxReceive) * 100)) : 0;
   const eligible = isAutoStopEligibleRow(item);
-  const countdown = stopCountdown(item);
+  const countdown = stopCountdown(item, fetchedAt, nowMs);
 
   return (
     <tr className="border-b border-border/50 last:border-0">
@@ -334,24 +364,12 @@ function TrafficRow({
           <Clock className="h-3.5 w-3.5 text-muted" />
           {formatIdle(item.idleForSeconds)}
         </div>
-        {countdown ? (
-          <p
-            className={cn(
-              "mt-1 max-w-[14rem] text-xs font-medium",
-              countdown.tone === "danger" && "text-error",
-              countdown.tone === "warning" && "text-warning",
-              countdown.tone === "muted" && "text-muted"
-            )}
-          >
-            {countdown.remainingLabel}
-          </p>
-        ) : null}
       </td>
       <td className="px-4 py-3">
         {countdown ? (
           <p
             className={cn(
-              "text-sm font-medium tabular-nums",
+              "text-lg font-semibold tabular-nums tracking-tight",
               countdown.tone === "danger" && "text-error",
               countdown.tone === "warning" && "text-warning",
               countdown.tone === "muted" && "text-muted"
