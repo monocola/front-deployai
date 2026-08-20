@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   ArrowRightLeft,
   CreditCard,
   FileText,
@@ -35,6 +36,12 @@ const NAV_ITEMS = [
     label: "Recursos",
     icon: Lock,
     match: (p: string) => p.startsWith("/manager-resource"),
+  },
+  {
+    href: "/trafico",
+    label: "Tráfico",
+    icon: Activity,
+    match: (p: string) => p.startsWith("/trafico"),
   },
   {
     href: "/transfer-resource",
