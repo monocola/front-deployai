@@ -10,8 +10,8 @@ import {
   Loader2,
   Moon,
   Search,
+  TimerReset,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/core/errors/api-error.model";
@@ -95,7 +95,7 @@ function stopCountdown(
   nowMs: number
 ): {
   remainingLabel: string;
-  tone: "muted" | "warning" | "danger";
+  tone: "muted" | "warning" | "danger" | "live";
 } | null {
   if (!isAutoStopEligibleRow(item)) return null;
   if (item.activity === "SLEEPING") {
@@ -105,12 +105,12 @@ function stopCountdown(
     return { remainingLabel: "Detenida", tone: "muted" };
   }
   if (!item.autoStopEnabled) {
-    return { remainingLabel: "Auto-stop off", tone: "muted" };
+    return { remainingLabel: "Off", tone: "muted" };
   }
   if (item.activity === "ACTIVE") {
     return {
       remainingLabel: formatClock(autoStopMinutes(item) * 60),
-      tone: "muted",
+      tone: "live",
     };
   }
   const remaining =
@@ -118,9 +118,6 @@ function stopCountdown(
     (item.idleForSeconds ?? 0) -
     secondsSinceFetch(fetchedAt, nowMs);
   const label = formatClock(remaining);
-  if (remaining <= 0) {
-    return { remainingLabel: label, tone: "danger" };
-  }
   if (remaining <= 60) {
     return { remainingLabel: label, tone: "danger" };
   }
@@ -130,21 +127,42 @@ function stopCountdown(
   };
 }
 
-function activityBadge(activity: TrafficActivity): {
-  variant: "default" | "success" | "warning" | "muted";
+function activityStyle(activity: TrafficActivity): {
   label: string;
+  className: string;
+  dot: string;
 } {
   switch (activity) {
     case "ACTIVE":
-      return { variant: "success", label: "Activa" };
+      return {
+        label: "Activa",
+        className: "border-success/20 bg-success/10 text-success",
+        dot: "bg-success animate-pulse",
+      };
     case "IDLE":
-      return { variant: "warning", label: "Inactiva" };
+      return {
+        label: "Inactiva",
+        className: "border-warning/20 bg-warning/10 text-warning",
+        dot: "bg-warning",
+      };
     case "SLEEPING":
-      return { variant: "muted", label: "Dormida" };
+      return {
+        label: "Dormida",
+        className: "border-primary/20 bg-primary/10 text-primary",
+        dot: "bg-primary",
+      };
     case "STOPPED":
-      return { variant: "muted", label: "Detenida" };
+      return {
+        label: "Detenida",
+        className: "border-border bg-card-elevated text-muted",
+        dot: "bg-muted-foreground",
+      };
     default:
-      return { variant: "default", label: "Sin datos" };
+      return {
+        label: "Sin datos",
+        className: "border-border bg-card-elevated text-muted",
+        dot: "bg-muted-foreground",
+      };
   }
 }
 
@@ -167,27 +185,54 @@ export function ApplicationTrafficPage() {
     return filtered.reduce((max, item) => Math.max(max, item.receiveBytesPerSecond ?? 0), 0);
   }, [filtered]);
 
+  const threshold = data?.activeThresholdBytesPerSecond ?? 256;
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
-          <Activity className="h-5 w-5" />
-        </div>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tráfico de aplicaciones</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            Entrada y salida de red de cada aplicación (Prometheus). Se actualiza
-            cada 20 s. Umbral de actividad:{" "}
-            {formatBytesPerSecond(data?.activeThresholdBytesPerSecond ?? 2048)}.
-            Con Auto-stop On, el reloj baja cada segundo desde el último
-            tráfico (30:00). A 00:00 el recurso pasa a Dormida. Si hay
-            consumo, arranca y vuelve a 30:00. Always on de pago no aplica.
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+            Observabilidad
           </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            Tráfico de aplicaciones
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
+            Actividad en vivo por red. Auto-stop On cuenta 30:00 desde el último
+            consumo y duerme a 00:00. Umbral: {formatBytesPerSecond(threshold)}.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted">
+          {dataUpdatedAt ? (
+            <span className="rounded-full border border-border/80 bg-card px-3 py-1.5">
+              Medido {new Date(dataUpdatedAt).toLocaleTimeString("es-PE")}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+            Medir ahora
+          </Button>
         </div>
       </div>
 
-      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <SummaryStat label="Aplicaciones" value={data?.totalApplications ?? 0} />
+        <SummaryStat label="Activas" value={data?.activeCount ?? 0} accent="success" />
+        <SummaryStat label="Inactivas" value={data?.idleCount ?? 0} accent="warning" />
+        <SummaryStat label="Dormidas" value={data?.sleepingCount ?? 0} accent="primary" />
+        <SummaryStat
+          label="RX total"
+          valueLabel={formatBytesPerSecond(data?.totalReceiveBytesPerSecond ?? 0)}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)] backdrop-blur">
+        <div className="flex flex-col gap-3 lg:flex-row">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <Input
@@ -197,119 +242,93 @@ export function ApplicationTrafficPage() {
                 if (event.key === "Enter") setSearch(q.trim());
               }}
               placeholder="Buscar por nombre, dominio o cliente"
-              className="pl-9"
+              className="h-10 rounded-xl border-border/80 bg-background/60 pl-9"
             />
           </div>
-          <Button type="button" onClick={() => setSearch(q.trim())}>
+          <Button type="button" className="h-10 rounded-xl" onClick={() => setSearch(q.trim())}>
             Buscar
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => void refetch()}
-            disabled={isFetching}
-          >
-            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Medir ahora
-          </Button>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-1.5">
           {ACTIVITY_FILTERS.map((filter) => (
             <button
               key={filter.value || "all"}
               type="button"
               onClick={() => setActivity(filter.value)}
               className={cn(
-                "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                 activity === filter.value
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border bg-background text-muted hover:text-foreground"
+                  ? "bg-primary text-white shadow-sm shadow-primary/25"
+                  : "bg-background/70 text-muted ring-1 ring-border hover:text-foreground"
               )}
             >
               {filter.label}
             </button>
           ))}
         </div>
-        {dataUpdatedAt ? (
-          <p className="text-[11px] text-muted">
-            Última medición: {new Date(dataUpdatedAt).toLocaleString("es-PE")}
-          </p>
-        ) : null}
         {data?.metricsWarning ? (
-          <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          <p className="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-sm text-foreground">
             {data.metricsWarning}
           </p>
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryStat label="Aplicaciones" value={data?.totalApplications ?? 0} />
-        <SummaryStat label="Activas" value={data?.activeCount ?? 0} />
-        <SummaryStat label="Inactivas" value={data?.idleCount ?? 0} />
-        <SummaryStat label="Dormidas" value={data?.sleepingCount ?? 0} />
-        <SummaryStat
-          label="RX total"
-          valueLabel={formatBytesPerSecond(data?.totalReceiveBytesPerSecond ?? 0)}
-        />
-      </div>
-
       {isLoading ? (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : isError ? (
-        <p className="rounded-lg border border-error/30 bg-error/5 px-4 py-3 text-sm text-error">
+        <p className="rounded-2xl border border-error/30 bg-error/5 px-4 py-3 text-sm text-error">
           {getErrorMessage(error)}
         </p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+        <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
           <Moon className="mx-auto mb-3 h-8 w-8 text-muted" />
           <p className="font-medium text-foreground">No hay aplicaciones para mostrar</p>
-          <p className="mt-1 text-sm text-muted">
-            Cuando existan apps desplegadas verás su tráfico de red aquí.
-          </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full min-w-[1180px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border/70 text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-medium">Aplicación</th>
-                <th className="px-4 py-3 font-medium">Actividad</th>
-                <th className="px-4 py-3 font-medium">Entrada</th>
-                <th className="px-4 py-3 font-medium">Salida</th>
-                <th className="px-4 py-3 font-medium">
-                  Sin tráfico
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">
-                    min:seg
-                  </span>
-                </th>
-                <th className="px-4 py-3 font-medium">
-                  Se detiene en
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">
-                    min:seg
-                  </span>
-                </th>
-                <th className="px-4 py-3 font-medium">Auto-stop</th>
-                <th className="px-4 py-3 font-medium">Plan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => (
-                <TrafficRow
-                  key={item.id}
-                  item={item}
-                  maxReceive={maxReceive}
-                  fetchedAt={dataUpdatedAt}
-                  nowMs={nowMs}
-                  autoStopPending={setAutoStop.isPending && setAutoStop.variables?.resourceId === item.id}
-                  onAutoStopChange={(enabled) =>
-                    setAutoStop.mutate({ resourceId: item.id, enabled })
-                  }
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_24px_80px_-48px_rgba(0,0,0,0.8)]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border/60 bg-card-elevated/40 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                  <th className="px-5 py-3.5">Aplicación</th>
+                  <th className="px-5 py-3.5">Estado</th>
+                  <th className="px-5 py-3.5">Entrada</th>
+                  <th className="px-5 py-3.5">Salida</th>
+                  <th className="px-5 py-3.5">
+                    Sin tráfico
+                    <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                      min:seg
+                    </span>
+                  </th>
+                  <th className="px-5 py-3.5">
+                    Se detiene en
+                    <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+                      min:seg
+                    </span>
+                  </th>
+                  <th className="px-5 py-3.5">Auto-stop</th>
+                  <th className="px-5 py-3.5">Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => (
+                  <TrafficRow
+                    key={item.id}
+                    item={item}
+                    maxReceive={maxReceive}
+                    fetchedAt={dataUpdatedAt}
+                    nowMs={nowMs}
+                    autoStopPending={setAutoStop.isPending && setAutoStop.variables?.resourceId === item.id}
+                    onAutoStopChange={(enabled) =>
+                      setAutoStop.mutate({ resourceId: item.id, enabled })
+                    }
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -320,15 +339,26 @@ function SummaryStat({
   label,
   value,
   valueLabel,
+  accent,
 }: {
   label: string;
   value?: number;
   valueLabel?: string;
+  accent?: "success" | "warning" | "primary";
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3">
-      <p className="text-xs text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+    <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card px-4 py-4">
+      <div
+        className={cn(
+          "absolute inset-x-0 top-0 h-px",
+          accent === "success" && "bg-success/70",
+          accent === "warning" && "bg-warning/70",
+          accent === "primary" && "bg-primary/70",
+          !accent && "bg-border"
+        )}
+      />
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
         {valueLabel ?? value}
       </p>
     </div>
@@ -350,74 +380,85 @@ function TrafficRow({
   autoStopPending: boolean;
   onAutoStopChange: (enabled: boolean) => void;
 }) {
-  const badge = activityBadge(item.activity);
+  const status = activityStyle(item.activity);
   const receive = item.receiveBytesPerSecond ?? 0;
-  const width = maxReceive > 0 ? Math.max(4, Math.round((receive / maxReceive) * 100)) : 0;
+  const width = maxReceive > 0 ? Math.max(6, Math.round((receive / maxReceive) * 100)) : 0;
   const eligible = isAutoStopEligibleRow(item);
   const countdown = stopCountdown(item, fetchedAt, nowMs);
   const idleClock = formatIdle(liveIdleSeconds(item, fetchedAt, nowMs));
+  const domain = item.primaryDomain?.replace(/^https?:\/\//, "") ?? null;
 
   return (
-    <tr className="border-b border-border/50 last:border-0">
-      <td className="px-4 py-3">
-        <p className="font-medium text-foreground">{item.name}</p>
-        <p className="truncate text-xs text-muted">
+    <tr className="border-b border-border/40 transition-colors last:border-0 hover:bg-white/[0.025]">
+      <td className="px-5 py-4">
+        <p className="max-w-[280px] truncate font-medium tracking-tight text-foreground">{item.name}</p>
+        <p className="mt-0.5 truncate text-xs text-muted">
           {item.userDisplayName || item.userEmail || "—"}
           {item.projectName ? ` · ${item.projectName}` : ""}
         </p>
-        {item.primaryDomain ? (
-          <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-xs text-muted">
+        {domain ? (
+          <span className="mt-2 inline-flex max-w-[280px] items-center gap-1 truncate rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-muted ring-1 ring-border/70">
             <Globe className="h-3 w-3 shrink-0" />
-            <span className="truncate">{item.primaryDomain.replace(/^https?:\/\//, "")}</span>
-          </p>
+            <span className="truncate">{domain}</span>
+          </span>
         ) : null}
       </td>
-      <td className="px-4 py-3">
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+      <td className="px-5 py-4">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+            status.className
+          )}
+        >
+          <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
+          {status.label}
+        </span>
         {item.framework ? (
-          <p className="mt-1 text-[11px] text-muted">{item.framework}</p>
+          <p className="mt-1.5 text-[11px] capitalize text-muted-foreground">{item.framework}</p>
         ) : null}
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 tabular-nums text-foreground">
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-1.5 font-medium tabular-nums text-foreground">
           <ArrowDownToLine className="h-3.5 w-3.5 text-muted" />
           {formatBytesPerSecond(item.receiveBytesPerSecond)}
         </div>
-        <div className="mt-1.5 h-1.5 w-36 overflow-hidden rounded-full bg-card-elevated">
+        <div className="mt-2 h-1 w-28 overflow-hidden rounded-full bg-background">
           <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
         </div>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 tabular-nums text-foreground">
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-1.5 font-medium tabular-nums text-foreground">
           <ArrowUpFromLine className="h-3.5 w-3.5 text-muted" />
           {formatBytesPerSecond(item.transmitBytesPerSecond)}
         </div>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 font-mono text-lg font-semibold tabular-nums tracking-tight text-foreground">
+      <td className="px-5 py-4">
+        <div className="inline-flex items-center gap-1.5 rounded-lg bg-background/70 px-2.5 py-1.5 font-mono text-base font-semibold tabular-nums tracking-tight text-foreground ring-1 ring-border/60">
           <Clock className="h-3.5 w-3.5 text-muted" />
           {idleClock}
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-5 py-4">
         {countdown ? (
-          <p
+          <div
             className={cn(
-              "font-mono text-lg font-semibold tabular-nums tracking-tight",
-              countdown.tone === "danger" && "text-error",
-              countdown.tone === "warning" && "text-warning",
-              countdown.tone === "muted" && "text-muted"
+              "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-base font-semibold tabular-nums tracking-tight ring-1",
+              countdown.tone === "danger" && "bg-error/10 text-error ring-error/20",
+              countdown.tone === "warning" && "bg-warning/10 text-warning ring-warning/20",
+              countdown.tone === "live" && "bg-success/10 text-success ring-success/20",
+              countdown.tone === "muted" && "bg-background/70 text-muted ring-border/60"
             )}
           >
+            <TimerReset className="h-3.5 w-3.5 opacity-70" />
             {countdown.remainingLabel}
-          </p>
+          </div>
         ) : (
           <p className="text-xs text-muted">—</p>
         )}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-5 py-4">
         {eligible ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               role="switch"
@@ -425,21 +466,19 @@ function TrafficRow({
               aria-label={`Auto-stop ${item.name}`}
               disabled={autoStopPending}
               onClick={() => onAutoStopChange(!item.autoStopEnabled)}
-              className={
-                item.autoStopEnabled
-                  ? "relative h-6 w-11 shrink-0 rounded-full bg-primary transition-colors disabled:opacity-50"
-                  : "relative h-6 w-11 shrink-0 rounded-full bg-card-elevated ring-1 ring-inset ring-border transition-colors disabled:opacity-50"
-              }
+              className={cn(
+                "relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50",
+                item.autoStopEnabled ? "bg-primary" : "bg-card-elevated ring-1 ring-inset ring-border"
+              )}
             >
               <span
-                className={
-                  item.autoStopEnabled
-                    ? "absolute left-6 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
-                    : "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-muted-foreground/70 shadow transition-all"
-                }
+                className={cn(
+                  "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all",
+                  item.autoStopEnabled ? "left-5" : "left-0.5"
+                )}
               />
             </button>
-            <span className="text-sm text-foreground">
+            <span className="text-xs font-medium text-muted">
               {item.autoStopEnabled ? "On" : "Off"}
             </span>
           </div>
@@ -447,9 +486,11 @@ function TrafficRow({
           <p className="text-xs text-muted">No aplica</p>
         )}
       </td>
-      <td className="px-4 py-3">
-        <p className="text-foreground">{item.planName || item.planCode || "Sin plan"}</p>
-        <p className="text-[11px] text-muted">
+      <td className="px-5 py-4">
+        <p className="text-sm font-medium text-foreground">
+          {item.planName || item.planCode || "Sin plan"}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted">
           {!eligible
             ? item.alwaysOn
               ? "Always on"
