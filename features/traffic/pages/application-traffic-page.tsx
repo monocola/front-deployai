@@ -24,6 +24,7 @@ import {
   autoStopMinutes,
   isAutoStopEligibleRow,
 } from "@/features/traffic/models/admin-traffic.model";
+import { cn } from "@/lib/utils";
 
 const ACTIVITY_FILTERS: Array<{ value: "" | TrafficActivity; label: string }> = [
   { value: "", label: "Todas" },
@@ -63,16 +64,22 @@ function stopCountdown(item: AdminApplicationTraffic): {
   }
   const remainingSecs = autoStopMinutes(item) * 60 - (item.idleForSeconds ?? 0);
   if (!item.autoStopEnabled) {
+    if (remainingSecs <= 0) {
+      return {
+        remainingLabel: "se detendría ahora · activa Auto-stop",
+        tone: "muted",
+      };
+    }
     return {
-      remainingLabel: `Off · ${autoStopMinutes(item)} min`,
+      remainingLabel: `se detiene en ${formatIdle(remainingSecs)} si activas`,
       tone: "muted",
     };
   }
   if (remainingSecs <= 0) {
-    return { remainingLabel: "Deteniendo ahora", tone: "danger" };
+    return { remainingLabel: "se detiene ahora", tone: "danger" };
   }
   return {
-    remainingLabel: formatIdle(remainingSecs),
+    remainingLabel: `se detiene en ${formatIdle(remainingSecs)}`,
     tone: remainingSecs <= 120 ? "danger" : "warning",
   };
 }
@@ -327,6 +334,18 @@ function TrafficRow({
           <Clock className="h-3.5 w-3.5 text-muted" />
           {formatIdle(item.idleForSeconds)}
         </div>
+        {countdown ? (
+          <p
+            className={cn(
+              "mt-1 max-w-[14rem] text-xs font-medium",
+              countdown.tone === "danger" && "text-error",
+              countdown.tone === "warning" && "text-warning",
+              countdown.tone === "muted" && "text-muted"
+            )}
+          >
+            {countdown.remainingLabel}
+          </p>
+        ) : null}
       </td>
       <td className="px-4 py-3">
         {countdown ? (

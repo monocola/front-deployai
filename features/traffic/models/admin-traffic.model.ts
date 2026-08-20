@@ -2,9 +2,8 @@ export type TrafficActivity = "ACTIVE" | "IDLE" | "SLEEPING" | "STOPPED" | "NO_D
 
 const PLATFORM_NAME_MARKERS = [
   "backend-devployer",
-  "front-devployer",
+  "front-devployer-manager",
   "front-admin",
-  "front-deployai",
 ];
 
 export interface AdminApplicationTraffic {
